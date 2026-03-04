@@ -1,4 +1,4 @@
-﻿import { Suspense } from "react";
+import { Suspense } from "react";
 import VehicleResultsClient from "./VehicleResultsClient";
 
 export const dynamic = "force-dynamic";

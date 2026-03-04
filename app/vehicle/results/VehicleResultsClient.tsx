@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
@@ -28,10 +28,12 @@ export default function VehicleResultsClient() {
       setLoading(true);
       const { data, error } = await supabase
         .from("vehicle_issues")
-        .select(`
+        .select(
+          `
           id, rank_score, confidence, mileage_start, mileage_end,
           issues:issue_id (id, title, summary, safety_level)
-        `)
+        `
+        )
         .eq("vehicle_generation_id", genId)
         .order("rank_score", { ascending: false })
         .limit(10);
@@ -89,6 +91,10 @@ export default function VehicleResultsClient() {
               </div>
             </div>
           ))}
+
+          <p className="text-sm text-gray-500 mt-4">
+            Later we’ll add “Show more than 10” with paging.
+          </p>
         </div>
       )}
     </main>
