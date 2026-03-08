@@ -14,12 +14,12 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     (async () => {
       const { data: sessionData } = await supabase.auth.getSession();
+
       if (!sessionData.session) {
         router.push("/login");
         return;
       }
 
-      // Check admin allowlist
       const { data: adminRow } = await supabase
         .from("app_admins")
         .select("user_id")
@@ -59,7 +59,9 @@ export default function AdminDashboardPage() {
     router.push("/");
   }
 
-  if (loading) return <main className="p-6">Loading…</main>;
+  if (loading) {
+    return <main className="p-6">Loading…</main>;
+  }
 
   if (!isAdmin) {
     return (
@@ -69,7 +71,8 @@ export default function AdminDashboardPage() {
           You’re signed in, but not an admin yet.
         </p>
         <p className="mt-2 text-gray-600">
-          Add your user id to <code>public.app_admins</code> in Supabase, then refresh.
+          Add your user id to <code>public.app_admins</code> in Supabase, then
+          refresh.
         </p>
         <button className="mt-6 underline" onClick={signOut}>
           Sign out
@@ -91,7 +94,10 @@ export default function AdminDashboardPage() {
         <div className="border rounded-xl p-4">
           <h2 className="font-semibold">Pending issue candidates</h2>
           <p className="mt-2 text-3xl font-bold">{counts.issues}</p>
-          <Link className="underline mt-4 inline-block" href="/admin/candidates?tab=issues">
+          <Link
+            className="underline mt-4 inline-block"
+            href="/admin/candidates?tab=issues"
+          >
             Review →
           </Link>
         </div>
@@ -99,18 +105,24 @@ export default function AdminDashboardPage() {
         <div className="border rounded-xl p-4">
           <h2 className="font-semibold">Pending job candidates</h2>
           <p className="mt-2 text-3xl font-bold">{counts.jobs}</p>
-          <Link className="underline mt-4 inline-block" href="/admin/candidates?tab=jobs">
+          <Link
+            className="underline mt-4 inline-block"
+            href="/admin/candidates?tab=jobs"
+          >
             Review →
           </Link>
         </div>
       </div>
 
-      <div className="mt-8 flex gap-4">
+      <div className="mt-8 flex flex-wrap gap-4">
         <Link className="underline" href="/admin/candidates">
           Candidates
         </Link>
         <Link className="underline" href="/admin/seed">
           Seed data
+        </Link>
+        <Link className="underline" href="/admin/ingest">
+          Ingestion
         </Link>
       </div>
     </main>
