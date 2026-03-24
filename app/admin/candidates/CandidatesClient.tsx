@@ -95,7 +95,9 @@ export default function CandidatesClient() {
   async function promoteCandidate(type: "issue" | "job", id: string) {
     const res = await fetch("/api/promote/candidate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ type, id }),
     });
 
