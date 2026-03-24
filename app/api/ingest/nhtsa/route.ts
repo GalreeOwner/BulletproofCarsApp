@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,10 @@ type NhtsaRecallResult = {
   Remedy?: string;
   Notes?: string;
 };
+
+function makeContentHash(text: string) {
+  return crypto.createHash("sha256").update(text).digest("hex");
+}
 
 function buildRawText(row: NhtsaRecallResult) {
   return [
@@ -75,16 +80,21 @@ export async function POST(req: NextRequest) {
     const json = await res.json();
     const results: NhtsaRecallResult[] = Array.isArray(json.results) ? json.results : [];
 
-    const rows = results.map((row) => ({
-      source_id: source.id,
-      external_id: row.NHTSACampaignNumber ?? null,
-      url,
-      title: `${year} ${make} ${model} recall ${row.NHTSACampaignNumber ?? ""}`.trim(),
-      raw_text: buildRawText(row),
-      raw_json: row,
-      document_type: "nhtsa_recall",
-      status: "new",
-    }));
+    const rows = results.map((row) => {
+      const rawText = buildRawText(row);
+
+      return {
+        source_id: source.id,
+        external_id: row.NHTSACampaignNumber ?? null,
+        url,
+        title: `${year} ${make} ${model} recall ${row.NHTSACampaignNumber ?? ""}`.trim(),
+        raw_text: rawText,
+        raw_json: row,
+        content_hash: makeContentHash(rawText),
+        document_type: "nhtsa_recall",
+        status: "new",
+      };
+    });
 
     if (rows.length > 0) {
       const { error: insertError } = await supabaseAdmin
