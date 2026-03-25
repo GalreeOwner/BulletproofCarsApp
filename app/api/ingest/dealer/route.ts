@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
+
+function makeContentHash(text: string) {
+  return crypto.createHash("sha256").update(text).digest("hex");
+}
 
 function stripHtml(html: string) {
   return html
@@ -73,6 +78,7 @@ export async function POST(req: NextRequest) {
           title,
           raw_text: rawText,
           raw_json: { fetched_from: url },
+          content_hash: makeContentHash(rawText),
           document_type: "dealer_page",
           status: "new",
         },
