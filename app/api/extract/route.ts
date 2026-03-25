@@ -159,6 +159,9 @@ export async function POST(req: NextRequest) {
     let issueCandidatesCreated = 0;
     let jobCandidatesCreated = 0;
 
+    const issueErrors: string[] = [];
+    const jobErrors: string[] = [];
+
     for (const doc of documents) {
       const issueTitle = detectIssueTitle(doc);
       const issueSummary = buildIssueSummary(doc);
@@ -174,7 +177,9 @@ export async function POST(req: NextRequest) {
         status: "pending",
       });
 
-      if (!issueInsert.error) {
+      if (issueInsert.error) {
+        issueErrors.push(issueInsert.error.message);
+      } else {
         issueCandidatesCreated += 1;
       }
 
@@ -187,7 +192,9 @@ export async function POST(req: NextRequest) {
         status: "pending",
       });
 
-      if (!jobInsert.error) {
+      if (jobInsert.error) {
+        jobErrors.push(jobInsert.error.message);
+      } else {
         jobCandidatesCreated += 1;
       }
 
@@ -204,6 +211,8 @@ export async function POST(req: NextRequest) {
       processed,
       issueCandidatesCreated,
       jobCandidatesCreated,
+      issueErrors,
+      jobErrors,
     });
   } catch (error) {
     return NextResponse.json(
