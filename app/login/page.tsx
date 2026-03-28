@@ -19,22 +19,37 @@ export default function LoginPage() {
   }, [router]);
 
   async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
+  e.preventDefault();
+  setError(null);
+  setBusy(true);
 
-    const fn =
+  try {
+    const result =
       mode === "signin"
-        ? supabase.auth.signInWithPassword
-        : supabase.auth.signUp;
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({ email, password });
 
-    const { error } = await fn({ email, password });
+    if (result.error) {
+      setError(result.error.message);
+      return;
+    }
 
-    setBusy(false);
+    // For sign-up, Supabase may create the user without an active session
+    // if email confirmation is required.
+    if (mode === "signup") {
+      setError(
+        "Account created. If confirmation is required, confirm your email first, then sign in."
+      );
+      return;
+    }
 
-    if (error) return setError(error.message);
     router.push("/admin");
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Unexpected auth error");
+  } finally {
+    setBusy(false);
   }
+}
 
   return (
     <main className="p-6 max-w-md mx-auto">
