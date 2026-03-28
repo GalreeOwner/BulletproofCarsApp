@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
@@ -170,6 +170,7 @@ export async function POST(req: NextRequest) {
       const difficulty = detectDifficulty(jobTitle);
 
       const issueInsert = await supabaseAdmin.from("issue_candidates").insert({
+        source_document_id: doc.id,
         title: issueTitle,
         summary: issueSummary,
         confidence: doc.document_type === "nhtsa_recall" ? 0.85 : 0.65,
@@ -184,6 +185,7 @@ export async function POST(req: NextRequest) {
       }
 
       const jobInsert = await supabaseAdmin.from("job_candidates").insert({
+        source_document_id: doc.id,
         title: jobTitle,
         summary: jobSummary,
         difficulty,
