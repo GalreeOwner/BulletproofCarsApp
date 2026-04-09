@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
@@ -137,6 +137,22 @@ function buildJobSummary(issueTitle: string, doc: SourceDocument): string {
   );
 }
 
+function extractVehicleGenerationId(doc: SourceDocument): string | null {
+  return (
+    doc.raw_json?.vehicle_generation_id ??
+    doc.raw_json?.metadata?.vehicle_generation_id ??
+    null
+  );
+}
+
+function extractIssueId(doc: SourceDocument): string | null {
+  return (
+    doc.raw_json?.issue_id ??
+    doc.raw_json?.metadata?.issue_id ??
+    null
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -169,14 +185,25 @@ export async function POST(req: NextRequest) {
       const jobSummary = buildJobSummary(issueTitle, doc);
       const difficulty = detectDifficulty(jobTitle);
 
-      const issueInsert = await supabaseAdmin.from("issue_candidates").insert({
+      const vehicleGenerationId = extractVehicleGenerationId(doc);
+      const sourceIssueId = extractIssueId(doc);
+
+      const issuePayload: Record<string, any> = {
         source_document_id: doc.id,
         title: issueTitle,
         summary: issueSummary,
         confidence: doc.document_type === "nhtsa_recall" ? 0.85 : 0.65,
         source_urls: [doc.url],
         status: "pending",
-      });
+      };
+
+      if (vehicleGenerationId) {
+        issuePayload.vehicle_generation_id = vehicleGenerationId;
+      }
+
+      const issueInsert = await supabaseAdmin
+        .from("issue_candidates")
+        .insert(issuePayload);
 
       if (issueInsert.error) {
         issueErrors.push(issueInsert.error.message);
@@ -184,7 +211,7 @@ export async function POST(req: NextRequest) {
         issueCandidatesCreated += 1;
       }
 
-      const jobInsert = await supabaseAdmin.from("job_candidates").insert({
+      const jobPayload: Record<string, any> = {
         source_document_id: doc.id,
         title: jobTitle,
         summary: jobSummary,
@@ -192,7 +219,15 @@ export async function POST(req: NextRequest) {
         confidence: doc.document_type === "nhtsa_recall" ? 0.75 : 0.6,
         source_urls: [doc.url],
         status: "pending",
-      });
+      };
+
+      if (sourceIssueId) {
+        jobPayload.issue_id = sourceIssueId;
+      }
+
+      const jobInsert = await supabaseAdmin
+        .from("job_candidates")
+        .insert(jobPayload);
 
       if (jobInsert.error) {
         jobErrors.push(jobInsert.error.message);

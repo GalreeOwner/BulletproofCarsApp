@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import crypto from "crypto";
 
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       return {
         source_id: source.id,
         external_id: row.NHTSACampaignNumber ?? null,
-        url,
+        url: `${url}#${row.NHTSACampaignNumber ?? "unknown"}`,
         title: `${year} ${make} ${model} recall ${row.NHTSACampaignNumber ?? ""}`.trim(),
         raw_text: rawText,
         raw_json: row,
