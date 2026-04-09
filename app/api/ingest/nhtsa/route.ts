@@ -38,6 +38,9 @@ export async function POST(req: NextRequest) {
     const make = String(body.make ?? "").trim();
     const model = String(body.model ?? "").trim();
     const year = String(body.year ?? "").trim();
+    const vehicleGenerationId = body.vehicleGenerationId
+      ? String(body.vehicleGenerationId).trim()
+      : null;
 
     if (!make || !model || !year) {
       return NextResponse.json(
@@ -59,11 +62,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const url = `https://api.nhtsa.gov/recalls/recallsByVehicle?make=${encodeURIComponent(
+    const baseUrl = `https://api.nhtsa.gov/recalls/recallsByVehicle?make=${encodeURIComponent(
       make
     )}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`;
 
-    const res = await fetch(url, {
+    const res = await fetch(baseUrl, {
       headers: {
         Accept: "application/json",
       },
@@ -86,10 +89,18 @@ export async function POST(req: NextRequest) {
       return {
         source_id: source.id,
         external_id: row.NHTSACampaignNumber ?? null,
-        url: `${url}#${row.NHTSACampaignNumber ?? "unknown"}`,
+        url: `${baseUrl}#${row.NHTSACampaignNumber ?? "unknown"}`,
         title: `${year} ${make} ${model} recall ${row.NHTSACampaignNumber ?? ""}`.trim(),
         raw_text: rawText,
-        raw_json: row,
+        raw_json: {
+          ...row,
+          metadata: {
+            make,
+            model,
+            year,
+            vehicle_generation_id: vehicleGenerationId,
+          },
+        },
         content_hash: makeContentHash(rawText),
         document_type: "nhtsa_recall",
         status: "new",
@@ -116,7 +127,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       fetched: results.length,
       stored: rows.length,
-      vehicle: { make, model, year },
+      vehicle: { make, model, year, vehicleGenerationId },
     });
   } catch (error) {
     return NextResponse.json(
