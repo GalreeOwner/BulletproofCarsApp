@@ -6,6 +6,7 @@ export default function AdminIngestPage() {
   const [make, setMake] = useState("Honda");
   const [model, setModel] = useState("CR-V");
   const [year, setYear] = useState("2011");
+  const [vehicleGenerationId, setVehicleGenerationId] = useState("");
 
   const [dealerUrl, setDealerUrl] = useState("");
   const [dealerName, setDealerName] = useState("Dealer FAQ");
@@ -24,7 +25,12 @@ export default function AdminIngestPage() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ make, model, year }),
+      body: JSON.stringify({
+        make,
+        model,
+        year,
+        vehicleGenerationId: vehicleGenerationId || null,
+      }),
     });
 
     const json = await res.json();
@@ -110,6 +116,14 @@ export default function AdminIngestPage() {
             placeholder="Year"
           />
         </div>
+
+        <input
+          className="border rounded-lg p-2 w-full mt-3"
+          value={vehicleGenerationId}
+          onChange={(e) => setVehicleGenerationId(e.target.value)}
+          placeholder="Vehicle generation ID (optional but recommended)"
+        />
+
         <button
           className="mt-4 rounded-lg bg-black text-white px-4 py-2"
           onClick={ingestNhtsa}
