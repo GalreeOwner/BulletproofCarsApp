@@ -13,14 +13,16 @@ type Job = {
   disclaimer: string | null;
 };
 
+type Part = {
+  id: string;
+  name: string;
+  brand: string | null;
+  quality_tier: string | null;
+};
+
 type PartRow = {
   recommended_rank: number;
-  parts: {
-    id: string;
-    name: string;
-    brand: string | null;
-    quality_tier: string | null;
-  } | null;
+  parts: Part | null;
 };
 
 type OfferRow = {
@@ -36,6 +38,11 @@ type VideoRow = {
     url: string;
     publisher: string | null;
   } | null;
+};
+
+type RawPartRow = {
+  recommended_rank: number;
+  parts: Part | Part[] | null;
 };
 
 type Props = {
@@ -88,11 +95,16 @@ export default function JobDetailClient({ jobId }: Props) {
       }
 
       if (partRows) {
-        setParts(partRows as PartRow[]);
+        const normalizedPartRows: PartRow[] = (partRows as RawPartRow[]).map((row) => ({
+          recommended_rank: row.recommended_rank,
+          parts: Array.isArray(row.parts) ? row.parts[0] ?? null : row.parts,
+        }));
+
+        setParts(normalizedPartRows);
 
         const offersMap: Record<string, OfferRow[]> = {};
 
-        for (const pr of partRows as PartRow[]) {
+        for (const pr of normalizedPartRows) {
           const partId = pr.parts?.id;
           if (!partId) continue;
 
