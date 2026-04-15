@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
@@ -35,13 +35,15 @@ type OfferRow = {
   vendors: Vendor | null;
 };
 
+type HowtoResource = {
+  title: string;
+  url: string;
+  publisher: string | null;
+};
+
 type VideoRow = {
   rank: number;
-  howto_resources: {
-    title: string;
-    url: string;
-    publisher: string | null;
-  } | null;
+  howto_resources: HowtoResource | null;
 };
 
 type RawPartRow = {
@@ -53,6 +55,11 @@ type RawOfferRow = {
   price: number | null;
   affiliate_url: string;
   vendors: Vendor | Vendor[] | null;
+};
+
+type RawVideoRow = {
+  rank: number;
+  howto_resources: HowtoResource | HowtoResource[] | null;
 };
 
 type Props = {
@@ -147,7 +154,16 @@ export default function JobDetailClient({ jobId }: Props) {
         return;
       }
 
-      if (videoRows) setVideos(videoRows as VideoRow[]);
+      if (videoRows) {
+        const normalizedVideoRows: VideoRow[] = (videoRows as RawVideoRow[]).map((row) => ({
+          rank: row.rank,
+          howto_resources: Array.isArray(row.howto_resources)
+            ? row.howto_resources[0] ?? null
+            : row.howto_resources,
+        }));
+
+        setVideos(normalizedVideoRows);
+      }
 
       setLoading(false);
     })();
