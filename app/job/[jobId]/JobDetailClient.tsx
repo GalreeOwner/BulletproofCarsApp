@@ -25,10 +25,14 @@ type PartRow = {
   parts: Part | null;
 };
 
+type Vendor = {
+  name: string;
+};
+
 type OfferRow = {
   price: number | null;
   affiliate_url: string;
-  vendors: { name: string } | null;
+  vendors: Vendor | null;
 };
 
 type VideoRow = {
@@ -43,6 +47,12 @@ type VideoRow = {
 type RawPartRow = {
   recommended_rank: number;
   parts: Part | Part[] | null;
+};
+
+type RawOfferRow = {
+  price: number | null;
+  affiliate_url: string;
+  vendors: Vendor | Vendor[] | null;
 };
 
 type Props = {
@@ -113,7 +123,13 @@ export default function JobDetailClient({ jobId }: Props) {
             .select("price, affiliate_url, vendors:vendor_id (name)")
             .eq("part_id", partId);
 
-          offersMap[partId] = (offers ?? []) as OfferRow[];
+          const normalizedOffers: OfferRow[] = ((offers ?? []) as RawOfferRow[]).map((offer) => ({
+            price: offer.price,
+            affiliate_url: offer.affiliate_url,
+            vendors: Array.isArray(offer.vendors) ? offer.vendors[0] ?? null : offer.vendors,
+          }));
+
+          offersMap[partId] = normalizedOffers;
         }
 
         setOffersByPartId(offersMap);
