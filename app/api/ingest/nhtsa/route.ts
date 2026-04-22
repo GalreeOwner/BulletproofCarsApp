@@ -45,6 +45,8 @@ export async function POST(req: NextRequest) {
       ? String(body.vehicleGenerationId).trim()
       : null;
 
+    console.log("[ingest/nhtsa] Request params:", { make, model, year, vehicleGenerationId });
+
     if (!make || !model || !year) {
       return NextResponse.json(
         { error: "make, model, and year are required" },
@@ -52,7 +54,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // --- NHTSA fetch ---
     const nhtsaUrl = `https://api.nhtsa.gov/complaints/complaintsByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`;
+    console.log("[ingest/nhtsa] Fetching:", nhtsaUrl);
 
     const res = await fetch(nhtsaUrl, {
       headers: { Accept: "application/json" },
@@ -60,6 +64,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!res.ok) {
+      console.error("[ingest/nhtsa] NHTSA fetch failed:", res.status, res.statusText);
       return NextResponse.json(
         { error: `NHTSA request failed with status ${res.status}` },
         { status: 502 }
@@ -68,11 +73,17 @@ export async function POST(req: NextRequest) {
 
     const json = await res.json();
     const complaints: NhtsaComplaint[] = Array.isArray(json.results) ? json.results : [];
+    console.log("[ingest/nhtsa] Complaints returned from NHTSA:", complaints.length);
 
     if (complaints.length === 0) {
+      console.log("[ingest/nhtsa] No complaints found — nothing to insert.");
       return NextResponse.json({ ok: true, fetched: 0, inserted: 0, skipped: 0 });
     }
 
+    // Log a sample complaint to confirm shape
+    console.log("[ingest/nhtsa] Sample complaint[0]:", JSON.stringify(complaints[0], null, 2));
+
+    // --- Build rows ---
     const rows = complaints.map((complaint) => {
       const rawText = buildRawText(complaint, make, model, year);
       return {
@@ -91,17 +102,30 @@ export async function POST(req: NextRequest) {
       };
     });
 
+    console.log("[ingest/nhtsa] Rows to upsert:", rows.length);
+    console.log("[ingest/nhtsa] Sample row[0] fields:", {
+      content_hash: rows[0].content_hash,
+      document_type: rows[0].document_type,
+      vehicle_generation_id: rows[0].vehicle_generation_id,
+      external_id: rows[0].external_id,
+      title: rows[0].title,
+    });
+
+    // --- Upsert into source_documents ---
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("source_documents")
       .upsert(rows, { onConflict: "content_hash", ignoreDuplicates: true })
       .select("id");
 
     if (insertError) {
+      console.error("[ingest/nhtsa] Supabase upsert error:", insertError);
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
     const insertedCount = inserted?.length ?? 0;
     const skipped = complaints.length - insertedCount;
+
+    console.log("[ingest/nhtsa] Upsert complete — inserted:", insertedCount, "skipped (duplicates):", skipped);
 
     return NextResponse.json({
       ok: true,
@@ -111,6 +135,7 @@ export async function POST(req: NextRequest) {
       vehicle: { make, model, year, vehicleGenerationId },
     });
   } catch (error) {
+    console.error("[ingest/nhtsa] Unexpected error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
