@@ -83,10 +83,38 @@ export async function POST(req: NextRequest) {
     // Log a sample complaint to confirm shape
     console.log("[ingest/nhtsa] Sample complaint[0]:", JSON.stringify(complaints[0], null, 2));
 
+    // --- Upsert into sources ---
+    const { data: sourceRow, error: sourceError } = await supabaseAdmin
+      .from("sources")
+      .upsert(
+        {
+          source_type: "nhtsa",
+          name: "NHTSA Complaints",
+          base_url: "https://api.nhtsa.gov",
+          is_active: true,
+        },
+        { onConflict: "source_type,name" }
+      )
+      .select("id")
+      .single();
+
+    if (sourceError || !sourceRow?.id) {
+      console.error("[ingest/nhtsa] sources upsert failed — full error:", JSON.stringify(sourceError, null, 2));
+      console.error("[ingest/nhtsa] sourceRow returned:", sourceRow);
+      return NextResponse.json(
+        { error: `Failed to resolve source record: ${sourceError?.message ?? "no id returned"}` },
+        { status: 500 }
+      );
+    }
+
+    const sourceId: string = sourceRow.id;
+    console.log("[ingest/nhtsa] sourceId resolved:", sourceId);
+
     // --- Build rows ---
     const rows = complaints.map((complaint) => {
       const rawText = buildRawText(complaint, make, model, year);
       return {
+        source_id: sourceId,
         content_hash: makeContentHash(rawText),
         document_type: "nhtsa_complaint",
         status: "new",
