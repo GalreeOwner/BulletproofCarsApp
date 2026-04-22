@@ -5,165 +5,76 @@ export const dynamic = "force-dynamic";
 
 type SourceDocument = {
   id: string;
-  source_id: string;
-  url: string;
-  title: string | null;
-  raw_text: string;
-  raw_json: any;
-  document_type: string;
-  status: "new" | "processed" | "failed";
+  raw_json: {
+    components?: string;
+    summary?: string;
+    crash?: boolean;
+    fire?: boolean;
+  };
 };
 
-function normalizeWhitespace(text: string) {
-  return text.replace(/\s+/g, " ").trim();
+type ComponentGroup = {
+  count: number;
+  summaries: string[];
+  hasCrash: boolean;
+  hasFire: boolean;
+};
+
+function normalizeComponent(raw: string): string {
+  const u = raw.toUpperCase();
+  if (u.includes("ENGINE"))                              return "Engine";
+  if (u.includes("FUEL"))                                return "Fuel System";
+  if (u.includes("TRANSMISSION"))                        return "Transmission";
+  if (u.includes("BRAKE"))                               return "Brakes";
+  if (u.includes("ELECTRICAL") || u.includes("WIRING")) return "Electrical System";
+  if (u.includes("STEERING"))                            return "Steering";
+  if (u.includes("SUSPENSION"))                          return "Suspension";
+  if (u.includes("COOLING"))                             return "Cooling System";
+  if (u.includes("EXHAUST"))                             return "Exhaust";
+  if (u.includes("AIR BAG") || u.includes("AIRBAG"))    return "Airbags";
+  if (u.includes("SEAT BELT"))                           return "Seat Belts";
+  if (u.includes("TIRE") || u.includes("WHEEL"))        return "Tires & Wheels";
+  return toTitleCase(raw);
 }
 
-function truncate(text: string, max = 240) {
-  const clean = normalizeWhitespace(text);
-  if (clean.length <= max) return clean;
-  return clean.slice(0, max).trim() + "…";
+function toTitleCase(str: string): string {
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function detectIssueTitle(doc: SourceDocument): string {
-  const raw = `${doc.title ?? ""} ${doc.raw_text}`.toLowerCase();
+const COMPONENT_DISPLAY: Record<string, string> = {
+  "Engine":           "Engine Failure",
+  "Fuel System":      "Fuel System Issue",
+  "Transmission":     "Transmission Failure",
+  "Brakes":           "Brake System Issue",
+  "Electrical System":"Electrical System Failure",
+  "Steering":         "Steering System Issue",
+  "Suspension":       "Suspension Failure",
+  "Cooling System":   "Cooling System Failure",
+  "Exhaust":          "Exhaust System Issue",
+  "Airbags":          "Airbag System Issue",
+  "Seat Belts":       "Seat Belt Issue",
+  "Tires & Wheels":   "Tires & Wheels Issue",
+};
 
-  const rules: Array<{ keywords: string[]; title: string }> = [
-    { keywords: ["water pump", "coolant leak", "overheating"], title: "Water pump failure or coolant leak" },
-    { keywords: ["timing chain", "chain rattle", "timing tensioner"], title: "Timing chain or tensioner issue" },
-    { keywords: ["brake", "braking", "caliper"], title: "Brake system issue" },
-    { keywords: ["transmission", "shifting", "gear slipping"], title: "Transmission issue" },
-    { keywords: ["engine stall", "stalling"], title: "Engine stalling issue" },
-    { keywords: ["alternator", "charging system", "battery light"], title: "Charging system / alternator issue" },
-    { keywords: ["suspension", "control arm", "bushing", "strut"], title: "Suspension wear issue" },
-    { keywords: ["wheel bearing", "humming noise"], title: "Wheel bearing issue" },
-    { keywords: ["oil leak", "valve cover", "gasket"], title: "Oil leak / gasket issue" },
-    { keywords: ["ac compressor", "air conditioning"], title: "A/C system issue" },
-    { keywords: ["fuel pump", "fuel delivery"], title: "Fuel system / fuel pump issue" },
-    { keywords: ["steering", "power steering"], title: "Steering system issue" },
-  ];
-
-  for (const rule of rules) {
-    if (rule.keywords.some((k) => raw.includes(k))) return rule.title;
-  }
-
-  if (doc.title && doc.title.trim().length > 0) {
-    return truncate(doc.title, 90);
-  }
-
-  return "Potential vehicle reliability issue";
-}
-
-function detectJobTitle(issueTitle: string): string {
-  const lower = issueTitle.toLowerCase();
-
-  if (lower.includes("water pump")) return "Replace water pump";
-  if (lower.includes("timing chain")) return "Inspect and replace timing chain components";
-  if (lower.includes("brake")) return "Inspect and repair brake system";
-  if (lower.includes("transmission")) return "Diagnose and repair transmission issue";
-  if (lower.includes("alternator") || lower.includes("charging")) return "Replace alternator or charging components";
-  if (lower.includes("suspension")) return "Inspect and replace worn suspension components";
-  if (lower.includes("wheel bearing")) return "Replace wheel bearing";
-  if (lower.includes("oil leak") || lower.includes("gasket")) return "Replace leaking gasket or seal";
-  if (lower.includes("fuel")) return "Inspect and replace fuel system components";
-  if (lower.includes("steering")) return "Inspect and repair steering components";
-
-  return "Inspect and repair affected component";
-}
-
-function detectDifficulty(jobTitle: string): "novice" | "intermediate" | "expert" {
-  const lower = jobTitle.toLowerCase();
-
-  if (lower.includes("wheel bearing") || lower.includes("timing chain") || lower.includes("transmission")) {
-    return "expert";
-  }
-
-  if (
-    lower.includes("water pump") ||
-    lower.includes("alternator") ||
-    lower.includes("suspension") ||
-    lower.includes("brake")
-  ) {
-    return "intermediate";
-  }
-
-  return "novice";
-}
-
-function buildIssueSummary(doc: SourceDocument): string {
-  const raw = normalizeWhitespace(doc.raw_text);
-
-  if (doc.document_type === "nhtsa_recall") {
-    return truncate(
-      `This source suggests a recurring reliability or safety concern. ${raw}`,
-      260
-    );
-  }
-
-  if (doc.document_type === "dealer_page") {
-    return truncate(
-      `This dealer or service page appears to describe a known issue, symptom, or repair concern. ${raw}`,
-      260
-    );
-  }
-
-  if (doc.document_type === "reddit_post" || doc.document_type === "reddit_comment") {
-    return truncate(
-      `Owners are discussing a possible recurring issue, including symptoms and repair experiences. ${raw}`,
-      260
-    );
-  }
-
-  return truncate(raw, 260);
-}
-
-function buildJobSummary(issueTitle: string, doc: SourceDocument): string {
-  const base = normalizeWhitespace(doc.raw_text);
-
-  if (issueTitle.toLowerCase().includes("water pump")) {
-    return "Inspect for coolant leaks or overheating symptoms, then replace the water pump and gasket, refill coolant, and bleed the cooling system.";
-  }
-
-  if (issueTitle.toLowerCase().includes("timing chain")) {
-    return "Inspect for timing chain noise, tensioner wear, or startup rattle. Replace worn timing components before they cause more serious engine damage.";
-  }
-
-  if (issueTitle.toLowerCase().includes("brake")) {
-    return "Inspect the brake system, identify the worn or failing component, and replace pads, rotors, calipers, or hardware as needed.";
-  }
-
-  return truncate(
-    `Inspect the affected system, confirm the failure point, and repair or replace the worn component. Source notes: ${base}`,
-    260
-  );
-}
-
-function extractVehicleGenerationId(doc: SourceDocument): string | null {
-  return (
-    doc.raw_json?.vehicle_generation_id ??
-    doc.raw_json?.metadata?.vehicle_generation_id ??
-    null
-  );
-}
-
-function extractIssueId(doc: SourceDocument): string | null {
-  return (
-    doc.raw_json?.issue_id ??
-    doc.raw_json?.metadata?.issue_id ??
-    null
-  );
+function toDisplayTitle(component: string): string {
+  return COMPONENT_DISPLAY[component] ?? component;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const limit = Number(body.limit ?? 10);
+    const body = await req.json();
+    const vehicleGenerationId = String(body.vehicleGenerationId ?? "").trim();
 
+    if (!vehicleGenerationId) {
+      return NextResponse.json({ error: "vehicleGenerationId is required" }, { status: 400 });
+    }
+
+    // Step 1 — Fetch source documents
     const { data: docs, error: docsError } = await supabaseAdmin
       .from("source_documents")
-      .select("id,source_id,url,title,raw_text,raw_json,document_type,status")
-      .eq("status", "new")
-      .order("created_at", { ascending: true })
-      .limit(limit);
+      .select("id, raw_json")
+      .eq("vehicle_generation_id", vehicleGenerationId)
+      .eq("document_type", "nhtsa_complaint");
 
     if (docsError) {
       return NextResponse.json({ error: docsError.message }, { status: 500 });
@@ -171,85 +82,176 @@ export async function POST(req: NextRequest) {
 
     const documents = (docs ?? []) as SourceDocument[];
 
-    let processed = 0;
-    let issueCandidatesCreated = 0;
-    let jobCandidatesCreated = 0;
+    if (documents.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        documentsProcessed: 0,
+        uniqueComponents: 0,
+        issuesCreated: 0,
+        jobsCreated: 0,
+        skipped: 0,
+      });
+    }
 
-    const issueErrors: string[] = [];
-    const jobErrors: string[] = [];
+    // Step 2 — Group and count by normalized component
+    const grouped = new Map<string, ComponentGroup>();
 
     for (const doc of documents) {
-      const issueTitle = detectIssueTitle(doc);
-      const issueSummary = buildIssueSummary(doc);
-      const jobTitle = detectJobTitle(issueTitle);
-      const jobSummary = buildJobSummary(issueTitle, doc);
-      const difficulty = detectDifficulty(jobTitle);
+      const raw = doc.raw_json?.components?.trim();
+      if (!raw) continue;
 
-      const vehicleGenerationId = extractVehicleGenerationId(doc);
-      const sourceIssueId = extractIssueId(doc);
-
-      const issuePayload: Record<string, any> = {
-        source_document_id: doc.id,
-        title: issueTitle,
-        summary: issueSummary,
-        confidence: doc.document_type === "nhtsa_recall" ? 0.85 : 0.65,
-        source_urls: [doc.url],
-        status: "pending",
+      const component = normalizeComponent(raw);
+      const existing = grouped.get(component) ?? {
+        count: 0,
+        summaries: [],
+        hasCrash: false,
+        hasFire: false,
       };
 
-      if (vehicleGenerationId) {
-        issuePayload.vehicle_generation_id = vehicleGenerationId;
+      existing.count += 1;
+      if (doc.raw_json?.summary) existing.summaries.push(doc.raw_json.summary.trim());
+      if (doc.raw_json?.crash) existing.hasCrash = true;
+      if (doc.raw_json?.fire) existing.hasFire = true;
+
+      grouped.set(component, existing);
+    }
+
+    const top25 = Array.from(grouped.entries())
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 25);
+
+    const maxCount = top25[0]?.[1].count ?? 1;
+
+    // Pre-check which components already have issues so we can count skips accurately
+    const componentNames = top25.map(([c]) => c);
+
+    const { data: existingIssueRows } = await supabaseAdmin
+      .from("issues")
+      .select("id, component")
+      .in("component", componentNames)
+      .eq("source", "nhtsa_complaints");
+
+    const existingByComponent = new Map<string, string>(
+      (existingIssueRows ?? []).map((r: { id: string; component: string }) => [r.component, r.id])
+    );
+
+    let issuesCreated = 0;
+    let jobsCreated = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    // Step 3 — Write issues, vehicle_issues, jobs, issue_jobs
+    for (let rank = 0; rank < top25.length; rank++) {
+      const [component, group] = top25[rank];
+      const isNew = !existingByComponent.has(component);
+      const issueTitle = toDisplayTitle(component);
+      const summary = group.summaries.slice(0, 3).join(" | ") || issueTitle;
+      const safetyLevel = group.hasCrash || group.hasFire ? 2 : 1;
+      const severityScore = safetyLevel === 2 ? 0.8 : 0.4;
+      const frequencyScore = group.count / maxCount;
+
+      // a) Upsert issue
+      const { data: issueRow, error: issueError } = await supabaseAdmin
+        .from("issues")
+        .upsert(
+          {
+            title: issueTitle,
+            summary,
+            component,
+            system_tag: component,
+            safety_level: safetyLevel,
+            source: "nhtsa_complaints",
+          },
+          { onConflict: "component,source" }
+        )
+        .select("id")
+        .single();
+
+      if (issueError || !issueRow) {
+        errors.push(`Issue upsert failed for "${component}": ${issueError?.message ?? "no row returned"}`);
+        skipped += 1;
+        continue;
       }
 
-      const issueInsert = await supabaseAdmin
-        .from("issue_candidates")
-        .insert(issuePayload);
+      const issueId: string = issueRow.id;
 
-      if (issueInsert.error) {
-        issueErrors.push(issueInsert.error.message);
+      if (isNew) {
+        issuesCreated += 1;
       } else {
-        issueCandidatesCreated += 1;
+        skipped += 1;
       }
 
-      const jobPayload: Record<string, any> = {
-        source_document_id: doc.id,
-        title: jobTitle,
-        summary: jobSummary,
-        difficulty,
-        confidence: doc.document_type === "nhtsa_recall" ? 0.75 : 0.6,
-        source_urls: [doc.url],
-        status: "pending",
-      };
+      // b) Upsert vehicle_issues
+      const { error: viError } = await supabaseAdmin
+        .from("vehicle_issues")
+        .upsert(
+          {
+            vehicle_generation_id: vehicleGenerationId,
+            issue_id: issueId,
+            rank_score: group.count,
+            frequency_score: frequencyScore,
+            severity_score: severityScore,
+            confidence: 0.7,
+            cost_diy_parts_low: 0,
+            cost_diy_parts_high: 0,
+            cost_shop_low: 0,
+            cost_shop_high: 0,
+          },
+          { onConflict: "vehicle_generation_id,issue_id" }
+        );
 
-      if (sourceIssueId) {
-        jobPayload.issue_id = sourceIssueId;
+      if (viError) {
+        errors.push(`vehicle_issues upsert failed for "${component}": ${viError.message}`);
       }
 
-      const jobInsert = await supabaseAdmin
-        .from("job_candidates")
-        .insert(jobPayload);
+      // c & d) Only create job + issue_jobs row if the issue is new
+      if (!isNew) continue;
 
-      if (jobInsert.error) {
-        jobErrors.push(jobInsert.error.message);
-      } else {
-        jobCandidatesCreated += 1;
+      const { data: jobRow, error: jobError } = await supabaseAdmin
+        .from("jobs")
+        .insert({
+          title: `Fix: ${issueTitle}`,
+          difficulty: "professional",
+          layman_steps: "Steps will be added soon.",
+          tool_list: null,
+          disclaimer: "Always consult a qualified mechanic before attempting repairs.",
+          time_minutes_low: null,
+          time_minutes_high: null,
+        })
+        .select("id")
+        .single();
+
+      if (jobError || !jobRow) {
+        errors.push(`Job insert failed for "${component}": ${jobError?.message ?? "no row returned"}`);
+        continue;
       }
 
-      await supabaseAdmin
-        .from("source_documents")
-        .update({ status: "processed" })
-        .eq("id", doc.id);
+      jobsCreated += 1;
 
-      processed += 1;
+      const { error: ijError } = await supabaseAdmin
+        .from("issue_jobs")
+        .upsert(
+          {
+            issue_id: issueId,
+            job_id: jobRow.id,
+            recommended_order: rank + 1,
+          },
+          { onConflict: "issue_id,job_id" }
+        );
+
+      if (ijError) {
+        errors.push(`issue_jobs upsert failed for "${component}": ${ijError.message}`);
+      }
     }
 
     return NextResponse.json({
       ok: true,
-      processed,
-      issueCandidatesCreated,
-      jobCandidatesCreated,
-      issueErrors,
-      jobErrors,
+      documentsProcessed: documents.length,
+      uniqueComponents: grouped.size,
+      issuesCreated,
+      jobsCreated,
+      skipped,
+      ...(errors.length > 0 ? { errors } : {}),
     });
   } catch (error) {
     return NextResponse.json(

@@ -1,4 +1,4 @@
-﻿import { Suspense } from "react";
+import { Suspense } from "react";
 import CandidatesClient from "./CandidatesClient";
 
 export const dynamic = "force-dynamic";

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { supabase } from "@/lib/supabaseClient";
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +25,11 @@ type JobCandidate = {
   created_at: string;
 };
 
+type ApprovedIssue = {
+  id: string;
+  title: string;
+};
+
 export default function CandidatesClient() {
   const router = useRouter();
 
@@ -32,6 +37,8 @@ export default function CandidatesClient() {
   const [loading, setLoading] = useState(true);
   const [issues, setIssues] = useState<IssueCandidate[]>([]);
   const [jobs, setJobs] = useState<JobCandidate[]>([]);
+  const [approvedIssues, setApprovedIssues] = useState<ApprovedIssue[]>([]);
+  const [selectedIssueByJob, setSelectedIssueByJob] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,13 +72,14 @@ export default function CandidatesClient() {
 
       await refresh();
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   async function refresh() {
     setLoading(true);
     setError(null);
 
-    const [issueRes, jobRes] = await Promise.all([
+    const [issueRes, jobRes, approvedIssueRes] = await Promise.all([
       supabase
         .from("issue_candidates")
         .select("id,title,summary,confidence,source_urls,status,created_at")
@@ -82,22 +90,51 @@ export default function CandidatesClient() {
         .select("id,title,summary,difficulty,confidence,source_urls,status,created_at")
         .eq("status", "pending")
         .order("created_at", { ascending: false }),
+      supabase
+        .from("issues")
+        .select("id,title")
+        .order("title", { ascending: true }),
     ]);
 
     if (issueRes.error) setError(issueRes.error.message);
     if (jobRes.error) setError(jobRes.error.message);
+    if (approvedIssueRes.error) setError(approvedIssueRes.error.message);
 
     setIssues((issueRes.data as any) ?? []);
     setJobs((jobRes.data as any) ?? []);
+    setApprovedIssues((approvedIssueRes.data as any) ?? []);
     setLoading(false);
   }
 
   async function promoteCandidate(type: "issue" | "job", id: string) {
+    if (type === "job") {
+      const selectedIssueId = selectedIssueByJob[id];
+
+      if (!selectedIssueId) {
+        alert("Please choose an issue to link this job to before promoting.");
+        return;
+      }
+
+      const res = await fetch("/api/promote/candidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, id, issueId: selectedIssueId }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json.error ?? "Promotion failed");
+        return;
+      }
+
+      await refresh();
+      return;
+    }
+
     const res = await fetch("/api/promote/candidate", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, id }),
     });
 
@@ -187,6 +224,36 @@ export default function CandidatesClient() {
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {tab === "jobs" && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium mb-2">
+                    Link this job to an approved issue
+                  </label>
+                  <select
+                    className="w-full border rounded-lg p-2"
+                    value={selectedIssueByJob[r.id] ?? ""}
+                    onChange={(e) =>
+                      setSelectedIssueByJob((prev) => ({
+                        ...prev,
+                        [r.id]: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Select issue...</option>
+                    {approvedIssues.map((issue) => (
+                      <option key={issue.id} value={issue.id}>
+                        {issue.title}
+                      </option>
+                    ))}
+                  </select>
+                  {approvedIssues.length === 0 && (
+                    <p className="mt-2 text-sm text-red-600">
+                      No approved issues found yet. Promote at least one issue first.
+                    </p>
+                  )}
                 </div>
               )}
 
